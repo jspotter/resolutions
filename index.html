@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Academic Senate Minutes & Resolutions Tracker</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- PDF.js for client-side PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+    }
+    .json-key { color: #881337; font-weight: 600; }
+    .json-string { color: #047857; }
+    .json-number { color: #1d4ed8; }
+    .json-boolean { color: #b45309; }
+    .json-null { color: #6b7280; }
+    pre.json-view {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.75rem;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col font-sans">
+
+  <!-- Navigation Header -->
+  <header class="bg-indigo-900 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <i data-lucide="landmark" class="w-8 h-8 text-indigo-300"></i>
+        <div>
+          <h1 class="text-xl font-bold tracking-wide">Academic Senate Resolutions Repository</h1>
+          <p class="text-xs text-indigo-200">Executive Council Structured Ingestion, Layout Extraction & SQLite System</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <button onclick="openIngestModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow transition">
+          <i data-lucide="file-up" class="w-4 h-4"></i> Ingest Document
+        </button>
+        <button onclick="syncWithCgiBackend()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow transition">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync SQLite
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full space-y-6">
+
+    <!-- Metrics Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="glass-card p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase">Total Resolutions</p>
+          <h3 id="stat-total" class="text-2xl font-extrabold text-slate-800">0</h3>
+        </div>
+        <div class="p-3 bg-indigo-50 text-indigo-600 rounded-lg"><i data-lucide="files" class="w-6 h-6"></i></div>
+      </div>
+      <div class="glass-card p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase">Passed</p>
+          <h3 id="stat-passed" class="text-2xl font-extrabold text-emerald-600">0</h3>
+        </div>
+        <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><i data-lucide="check-circle-2" class="w-6 h-6"></i></div>
+      </div>
+      <div class="glass-card p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase">Failed</p>
+          <h3 id="stat-failed" class="text-2xl font-extrabold text-rose-600">0</h3>
+        </div>
+        <div class="p-3 bg-rose-50 text-rose-600 rounded-lg"><i data-lucide="x-circle" class="w-6 h-6"></i></div>
+      </div>
+      <div class="glass-card p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase">No Action Taken</p>
+          <h3 id="stat-noaction" class="text-2xl font-extrabold text-amber-600">0</h3>
+        </div>
+        <div class="p-3 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="clock" class="w-6 h-6"></i></div>
+      </div>
+    </div>
+
+    <!-- Filters & Search Toolbar -->
+    <div class="glass-card p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+      <div class="relative w-full md:w-96">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+        <input type="text" id="search-input" oninput="renderResolutionsTable()" placeholder="Search by ID, title, or full text..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+        <select id="filter-status" onchange="renderResolutionsTable()" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="ALL">All Statuses</option>
+          <option value="Passed">Passed</option>
+          <option value="Failed">Failed</option>
+          <option value="No Action Taken">No Action Taken</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Resolutions Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm border-collapse">
+          <thead class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+            <tr>
+              <th class="p-4 w-44">Resolution ID</th>
+              <th class="p-4">Title</th>
+              <th class="p-4 w-36">Meeting Date</th>
+              <th class="p-4 w-36">Status</th>
+              <th class="p-4 w-32">PDF Metadata</th>
+              <th class="p-4 text-right w-28">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="resolutions-tbody" class="divide-y divide-slate-100">
+            <!-- Dynamic Rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Ingestion Modal -->
+  <div id="ingest-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i data-lucide="file-up" class="w-5 h-5 text-indigo-600"></i> Structured Document Ingestion
+        </h2>
+        <button onclick="closeIngestModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p class="text-xs text-slate-500">Upload a PDF or paste text. PDFs will be parsed into structured spatial text elements with (x,y) positioning, font metrics, transform matrices, and bounding boxes.</p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Select PDF File</label>
+          <input type="file" id="pdf-input" accept="application/pdf" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+        </div>
+        <div class="text-center text-xs text-slate-400 font-semibold">- OR PASTE TEXT BELOW -</div>
+        <div>
+          <textarea id="raw-text-input" rows="5" placeholder="Paste meeting text or minutes content directly here..." class="w-full p-3 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center pt-3 border-t">
+        <button onclick="loadDemoSample()" class="text-xs text-indigo-600 hover:underline font-semibold flex items-center gap-1">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Load Sample Data
+        </button>
+        <div class="flex space-x-3">
+          <button onclick="closeIngestModal()" class="px-4 py-2 border rounded-lg text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button onclick="processIngestDocument()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold shadow">Extract Structured Data</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staging & Editing Modal -->
+  <div id="staging-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-5xl w-full p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[92vh]">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i data-lucide="edit-3" class="w-5 h-5 text-indigo-600"></i> Staging: Extracted Items & Structured PDF Map
+          </h2>
+          <p class="text-xs text-slate-500">Inspect extracted items, spatial coordinates (X, Y, FontSize, Page), and structured dictionary representation before saving to SQLite.</p>
+        </div>
+        <button onclick="closeStagingModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="flex border-b border-slate-200 mt-3">
+        <button id="staging-tab-items-btn" onclick="switchStagingTab('items')" class="py-2 px-4 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5">
+          <i data-lucide="list" class="w-4 h-4"></i> Extracted Resolutions (<span id="staging-count">0</span>)
+        </button>
+        <button id="staging-tab-json-btn" onclick="switchStagingTab('json')" class="py-2 px-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5">
+          <i data-lucide="code" class="w-4 h-4"></i> PDF Structured Spatial Dictionary
+        </button>
+      </div>
+
+      <!-- Tab Contents -->
+      <div id="staging-tab-items" class="flex-grow overflow-y-auto py-4 space-y-4 my-1">
+        <!-- Dynamic Staged Items -->
+      </div>
+
+      <div id="staging-tab-json" class="flex-grow overflow-y-auto py-4 hidden bg-slate-900 text-slate-100 p-4 rounded-xl my-2">
+        <pre id="staging-json-view" class="json-view overflow-x-auto text-emerald-400"></pre>
+      </div>
+
+      <div class="flex justify-between items-center pt-3 border-t">
+        <button onclick="addManualStagedRow()" class="px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 flex items-center gap-1">
+          <i data-lucide="plus" class="w-4 h-4"></i> Add Manual Row
+        </button>
+        <div class="space-x-3">
+          <button onclick="closeStagingModal()" class="px-4 py-2 border rounded-lg text-sm text-slate-600 hover:bg-slate-50">Discard</button>
+          <button onclick="commitStagedToSQLite()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold shadow flex items-center gap-2">
+            <i data-lucide="database" class="w-4 h-4"></i> Commit to SQLite Database
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Text & Structured Viewer Modal -->
+  <div id="detail-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-start border-b pb-3">
+        <div>
+          <span id="detail-id" class="font-mono text-xs font-bold text-indigo-600 block mb-1"></span>
+          <h2 id="detail-title" class="text-lg font-bold text-slate-800"></h2>
+        </div>
+        <button onclick="closeDetailModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Details Tab Bar -->
+      <div class="flex border-b border-slate-200">
+        <button id="detail-tab-text-btn" onclick="switchDetailTab('text')" class="py-2 px-4 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5">
+          <i data-lucide="file-text" class="w-4 h-4"></i> Text View
+        </button>
+        <button id="detail-tab-metadata-btn" onclick="switchDetailTab('metadata')" class="py-2 px-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5">
+          <i data-lucide="layers" class="w-4 h-4"></i> Layout Metrics & Positional Structure
+        </button>
+      </div>
+
+      <!-- Detail View Contents -->
+      <div id="detail-tab-text" class="space-y-3 flex-grow overflow-y-auto pr-1">
+        <div class="flex items-center gap-4 text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border">
+          <div><strong class="text-slate-700">Meeting Date:</strong> <span id="detail-date"></span></div>
+          <div><strong class="text-slate-700">Status:</strong> <span id="detail-status"></span></div>
+          <div><strong class="text-slate-700">Pages:</strong> <span id="detail-pages">N/A</span></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Full Resolution / Motion Text</label>
+          <div id="detail-text" class="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 whitespace-pre-wrap font-sans max-h-80 overflow-y-auto leading-relaxed"></div>
+        </div>
+      </div>
+
+      <div id="detail-tab-metadata" class="hidden flex-grow overflow-y-auto pr-1">
+        <div class="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-900 space-y-1">
+          <p class="font-bold flex items-center gap-1"><i data-lucide="info" class="w-3.5 h-3.5"></i> Structured Text Item Map</p>
+          <p>Contains absolute coordinates (X, Y), line bounding boxes, computed font sizes, transform matrices, and page indices generated during PDF parsing.</p>
+        </div>
+        <div class="bg-slate-900 rounded-xl p-4 text-slate-100 overflow-x-auto">
+          <pre id="detail-metadata-json" class="json-view text-emerald-400"></pre>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-3 border-t">
+        <button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-semibold">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script>
+    // Config
+    const CGI_ENDPOINT = "/~jpotter/cgi-bin/commit_resolutions.cgi";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+    // Application State
+    let state = {
+      resolutions: [],
+      stagedResolutions: [],
+      lastParsedDocumentMap: null
+    };
+
+    let activeDetailResolution = null;
+
+    // Initialization
+    document.addEventListener("DOMContentLoaded", () => {
+      lucide.createIcons();
+      syncWithCgiBackend();
+    });
+
+    // Modal Display Controls
+    function openIngestModal() { document.getElementById("ingest-modal").classList.remove("hidden"); }
+    function closeIngestModal() { document.getElementById("ingest-modal").classList.add("hidden"); }
+    function openStagingModal() { document.getElementById("staging-modal").classList.remove("hidden"); }
+    function closeStagingModal() { document.getElementById("staging-modal").classList.add("hidden"); }
+    function closeDetailModal() { document.getElementById("detail-modal").classList.add("hidden"); }
+
+    function switchStagingTab(tab) {
+      const itemsTab = document.getElementById("staging-tab-items");
+      const jsonTab = document.getElementById("staging-tab-json");
+      const itemsBtn = document.getElementById("staging-tab-items-btn");
+      const jsonBtn = document.getElementById("staging-tab-json-btn");
+
+      if (tab === 'items') {
+        itemsTab.classList.remove("hidden");
+        jsonTab.classList.add("hidden");
+        itemsBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5";
+        jsonBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5";
+      } else {
+        itemsTab.classList.add("hidden");
+        jsonTab.classList.remove("hidden");
+        jsonBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5";
+        itemsBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5";
+      }
+    }
+
+    function switchDetailTab(tab) {
+      const textTab = document.getElementById("detail-tab-text");
+      const metaTab = document.getElementById("detail-tab-metadata");
+      const textBtn = document.getElementById("detail-tab-text-btn");
+      const metaBtn = document.getElementById("detail-tab-metadata-btn");
+
+      if (tab === 'text') {
+        textTab.classList.remove("hidden");
+        metaTab.classList.add("hidden");
+        textBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5";
+        metaBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5";
+      } else {
+        textTab.classList.add("hidden");
+        metaTab.classList.remove("hidden");
+        metaBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5";
+        textBtn.className = "py-2 px-4 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-1.5";
+      }
+    }
+
+    // Backend Fetch / Synchronization
+    async function syncWithCgiBackend() {
+      try {
+        const response = await fetch(CGI_ENDPOINT, { method: "GET" });
+        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+
+        const rawText = await response.text();
+        let jsonString = rawText;
+        if (rawText.includes("\n\n")) jsonString = rawText.split("\n\n").slice(1).join("\n\n");
+        else if (rawText.includes("\r\n\r\n")) jsonString = rawText.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+
+        const data = JSON.parse(jsonString.trim());
+        if (data.resolutions) {
+          state.resolutions = data.resolutions;
+          renderResolutionsTable();
+          updateStats();
+        }
+      } catch (err) {
+        console.warn("CGI backend sync unavailable or operating in local state mode.", err);
+      }
+    }
+
+    /**
+     * Parses PDF using PDF.js and extracts rich positional metrics & metadata for every item.
+     * Yields a structured dictionary: { metadata, pages: [ { pageNumber, dimensions, textItems, lines } ], fullText }
+     */
+    async function parseStructuredPdf(arrayBuffer) {
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const docStructure = {
+        meta: {
+          numPages: pdf.numPages,
+          parsedAt: new Date().toISOString()
+        },
+        pages: [],
+        fullText: ""
+      };
+
+      let compiledFullText = "";
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.0 });
+        const textContent = await page.getTextContent();
+
+        const pageItemDicts = [];
+
+        textContent.items.forEach((item, idx) => {
+          const transform = item.transform || [1, 0, 0, 1, 0, 0];
+          const x = transform[4];
+          const y = transform[5];
+
+          const fontSize = Math.hypot(transform[0], transform[1]);
+
+          const pdfY = y;
+          const viewportY = viewport.height - y;
+
+          const itemDict = {
+            id: `p${pageNum}_i${idx}`,
+            str: item.str,
+            text: item.str,
+            page: pageNum,
+            x: Math.round(x * 100) / 100,
+            y: Math.round(y * 100) / 100,
+            viewportY: Math.round(viewportY * 100) / 100,
+            width: Math.round((item.width || 0) * 100) / 100,
+            height: Math.round((item.height || fontSize) * 100) / 100,
+            fontName: item.fontName || "default",
+            fontSize: Math.round(fontSize * 100) / 100,
+            transform: transform,
+            dir: item.dir || "ltr",
+            isWhitespace: item.str.trim().length === 0
+          };
+
+          pageItemDicts.push(itemDict);
+        });
+
+        const lines = groupItemsIntoLines(pageItemDicts);
+
+        const pageLineText = lines.map(l => l.text).join("\n");
+        compiledFullText += pageLineText + "\n\n";
+
+        docStructure.pages.push({
+          pageNumber: pageNum,
+          width: viewport.width,
+          height: viewport.height,
+          itemCount: pageItemDicts.length,
+          lineCount: lines.length,
+          lines: lines,
+          textItems: pageItemDicts
+        });
+      }
+
+      docStructure.fullText = compiledFullText.trim();
+      return docStructure;
+    }
+
+    /**
+     * Helper to group text items into visual lines based on Y-coordinate proximity
+     */
+    function groupItemsIntoLines(items) {
+      if (!items || items.length === 0) return [];
+
+      const sorted = [...items].sort((a, b) => {
+        if (Math.abs(a.y - b.y) > 3) {
+          return b.y - a.y;
+        }
+        return a.x - b.x;
+      });
+
+      const lines = [];
+      let currentLineItems = [];
+      let currentY = null;
+
+      sorted.forEach(item => {
+        if (currentY === null || Math.abs(item.y - currentY) <= 3) {
+          currentLineItems.push(item);
+          if (currentY === null) currentY = item.y;
+        } else {
+          if (currentLineItems.length > 0) {
+            currentLineItems.sort((a, b) => a.x - b.x);
+            lines.push(buildLineObject(currentLineItems));
+          }
+          currentLineItems = [item];
+          currentY = item.y;
+        }
+      });
+
+      if (currentLineItems.length > 0) {
+        currentLineItems.sort((a, b) => a.x - b.x);
+        lines.push(buildLineObject(currentLineItems));
+      }
+
+      return lines;
+    }
+
+    function buildLineObject(items) {
+      const lineText = items.map(i => i.str).join(" ").replace(/\s+/g, " ");
+      const minX = Math.min(...items.map(i => i.x));
+      const maxX = Math.max(...items.map(i => i.x + i.width));
+      const minY = Math.min(...items.map(i => i.y));
+      const maxY = Math.max(...items.map(i => i.y + i.height));
+      const page = items[0].page;
+      const primaryFont = items[0].fontName;
+      const avgFontSize = items.reduce((acc, i) => acc + i.fontSize, 0) / items.length;
+
+      return {
+        text: lineText,
+        page: page,
+        bounds: {
+          x: Math.round(minX * 100) / 100,
+          y: Math.round(minY * 100) / 100,
+          width: Math.round((maxX - minX) * 100) / 100,
+          height: Math.round((maxY - minY) * 100) / 100
+        },
+        fontName: primaryFont,
+        fontSize: Math.round(avgFontSize * 100) / 100,
+        itemCount: items.length,
+        items: items
+      };
+    }
+
+    // Process PDF or Text Ingestion
+    async function processIngestDocument() {
+      const pdfFile = document.getElementById("pdf-input").files[0];
+      const rawText = document.getElementById("raw-text-input").value;
+      let documentText = "";
+      let structuredMap = null;
+
+      if (pdfFile) {
+        try {
+          const arrayBuffer = await pdfFile.arrayBuffer();
+          structuredMap = await parseStructuredPdf(arrayBuffer);
+          documentText = structuredMap.fullText;
+          state.lastParsedDocumentMap = structuredMap;
+        } catch (err) {
+          alert("Error parsing PDF file: " + err.message);
+          return;
+        }
+      } else if (rawText.trim()) {
+        documentText = rawText;
+        structuredMap = createSyntheticStructuredMap(rawText);
+        state.lastParsedDocumentMap = structuredMap;
+      } else {
+        alert("Please select a PDF file or enter minutes text.");
+        return;
+      }
+
+      extractResolutionsFromStructuredText(documentText, structuredMap);
+      closeIngestModal();
+      renderStagingDrawer();
+      openStagingModal();
+    }
+
+    // Creates synthetic spatial metadata structure when text is pasted manually
+    function createSyntheticStructuredMap(text) {
+      const lines = text.split("\n").filter(l => l.trim().length > 0);
+      const textItems = lines.map((l, idx) => ({
+        id: `synthetic_${idx}`,
+        str: l,
+        text: l,
+        page: 1,
+        x: 72,
+        y: 792 - (idx * 16),
+        width: l.length * 6,
+        height: 12,
+        fontName: "SyntheticFont",
+        fontSize: 12,
+        transform: [12, 0, 0, 12, 72, 792 - (idx * 16)],
+        isWhitespace: false
+      }));
+
+      return {
+        meta: { numPages: 1, source: "Manual Input / Plain Text" },
+        pages: [{
+          pageNumber: 1,
+          width: 612,
+          height: 792,
+          itemCount: textItems.length,
+          lineCount: lines.length,
+          lines: lines.map((l, idx) => ({
+            text: l,
+            page: 1,
+            bounds: { x: 72, y: 792 - (idx * 16), width: l.length * 6, height: 12 },
+            fontSize: 12,
+            fontName: "SyntheticFont"
+          })),
+          textItems: textItems
+        }],
+        fullText: text
+      };
+    }
+
+	/**
+	 * Line-by-line resolution extraction using the structuredMap across a continuous document stream.
+	 * Features:
+	 * - Multi-line title detection (accumulates title lines until 'Whereas', 'Resolved', status, or blank line).
+	 * - Flattening across pages into a continuous sequence.
+	 * - Filtering of standalone page numbers.
+	 * - Termination of resolution text at numbered/lettered list markers (1., a., i., etc.).
+	 */
+	function extractResolutionsFromStructuredText(text, structuredMap) {
+	  state.stagedResolutions = [];
+
+	  if (!structuredMap || !structuredMap.pages) {
+		if (text) {
+		  structuredMap = createSyntheticStructuredMap(text);
+		} else {
+		  return;
+		}
+	  }
+
+	  // 1. Flatten all lines across pages into a single linear sequence
+	  let allLines = [];
+	  structuredMap.pages.forEach(p => {
+		if (p.lines) {
+		  allLines.push(...p.lines);
+		}
+	  });
+
+	  // Determine meeting date prefix
+	  let datePrefix = "2026.09.09";
+	  const fullText = structuredMap.fullText || text || "";
+	  const dateMatch = fullText.match(/(20\d{2})[.\-](\d{2})[.\-](\d{2})/);
+	  if (dateMatch) {
+		datePrefix = `${dateMatch[1]}.${dateMatch[2]}.${dateMatch[3]}`;
+	  }
+
+	  // Helper: Detect standalone page numbers
+	  function isStandalonePageNumber(lineText) {
+		const trimmed = lineText.trim();
+		if (!/^\d+$/.test(trimmed)) return false;
+		const num = parseInt(trimmed, 10);
+		return num > 0 && num < 200;
+	  }
+
+	  // 2. Filter out standalone page numbers
+	  const filteredLines = allLines.filter(lineObj => !isStandalonePageNumber(lineObj.text));
+
+	  // Regex patterns
+	  const headerRegex = /^\s*(?:(\d{4}\.\d{2}\.\d{2}\.\d+[\.\w]*)|(\d+\.[a-zA-Z]))[\.\s]\s*(.*)$/i;
+	  const listMarkerRegex = /^\s*(?:\d+|[a-zA-Z]|[ivxX]+)[\.\)]\s+/;
+	  
+	  // Triggers that mark the end of a title and start of resolution body/status
+	  const bodyStartRegex = /^\s*(Whereas|Resolved|Be it resolved|Adopted|Approved|Motion|Failed|Tabled|Passed|Moved)/i;
+
+	  let currentResolution = null;
+	  let isCollectingTitle = false;
+
+	  for (let i = 0; i < filteredLines.length; i++) {
+		const lineObj = filteredLines[i];
+		const rawLine = lineObj.text;
+		const lineText = rawLine.trim();
+
+		// Blank lines force title completion if currently collecting title
+		if (!lineText) {
+		  if (currentResolution && isCollectingTitle && currentResolution.title.length > 0) {
+			isCollectingTitle = false;
+		  }
+		  continue;
+		}
+
+		const match = lineText.match(headerRegex);
+
+		if (match) {
+		  // Finalize preceding resolution
+		  if (currentResolution) {
+			finalizeStagedResolution(currentResolution, datePrefix);
+		  }
+
+		  const rawId = match[1] || match[2];
+		  const initialTitlePart = match[3].trim();
+
+		  currentResolution = {
+			rawId: rawId,
+			titleParts: initialTitlePart ? [initialTitlePart] : [],
+			bodyLines: [],
+			spatialItems: [...(lineObj.items || [])]
+		  };
+
+		  // Check if the first line itself immediately starts a Whereas/Resolved clause
+		  if (initialTitlePart && bodyStartRegex.test(initialTitlePart)) {
+			isCollectingTitle = false;
+		  } else {
+			isCollectingTitle = true;
+		  }
+
+		} else if (currentResolution) {
+		  // Stop resolution if list marker (e.g. 1., a., i.) or major structural boundary is reached
+		  if (listMarkerRegex.test(lineText) || /^(Adjournment|Resolutions Packet|\d+\.\s+[A-Z])/i.test(lineText)) {
+			finalizeStagedResolution(currentResolution, datePrefix);
+			currentResolution = null;
+			isCollectingTitle = false;
+			continue;
+		  }
+
+		  // Check if this line marks the start of the resolution body (Whereas / Resolved / Status)
+		  if (bodyStartRegex.test(lineText)) {
+			isCollectingTitle = false;
+		  }
+
+		  if (isCollectingTitle) {
+			// Continue building multi-line title
+			currentResolution.titleParts.push(lineText);
+		  } else {
+			// Collect resolution body text
+			currentResolution.bodyLines.push(lineText);
+		  }
+
+		  if (lineObj.items) {
+			currentResolution.spatialItems.push(...lineObj.items);
+		  }
+		}
+	  }
+
+	  // Finalize remaining open resolution
+	  if (currentResolution) {
+		finalizeStagedResolution(currentResolution, datePrefix);
+	  }
+
+	  if (state.stagedResolutions.length === 0) {
+		addManualStagedRow();
+	  }
+
+	  document.getElementById("staging-json-view").innerHTML = syntaxHighlightJson(structuredMap || { message: "No PDF structure available" });
+	}
+
+	/**
+	 * Helper to assemble title string and push to state.stagedResolutions
+	 */
+	function finalizeStagedResolution(resObj, datePrefix) {
+	  const fullId = resObj.rawId.includes(".") && resObj.rawId.split(".").length > 2
+					 ? resObj.rawId
+					 : `${datePrefix}.${resObj.rawId}`;
+
+	  const fullTitle = (resObj.titleParts || []).join(" ").trim();
+	  const bodyText = (resObj.bodyLines || []).join("\n").trim();
+	  const cleanText = bodyText.length > 0 ? bodyText : fullTitle;
+
+	  // Classify Status
+	  let status = "No Action Taken";
+	  const combinedContext = (fullTitle + "\n" + bodyText);
+	  if (/Approved by consent|Adopted by roll-call|Approved by roll-call|Motion passed|Approved|Adopted/i.test(combinedContext)) {
+		status = "Passed";
+	  } else if (/failed|rejected|defeated/i.test(combinedContext)) {
+		status = "Failed";
+	  } else if (/moved to|pulled from consent|tabled|postponed|no action/i.test(combinedContext)) {
+		status = "No Action Taken";
+	  }
+
+	  state.stagedResolutions.push({
+		id: fullId,
+		title: fullTitle,
+		text: cleanText,
+		status: status,
+		meeting_date: datePrefix,
+		spatialMetadata: {
+		  itemCount: resObj.spatialItems.length,
+		  sampleBounds: resObj.spatialItems[0] ? { x: resObj.spatialItems[0].x, y: resObj.spatialItems[0].y } : null,
+		  structuredDictionary: {
+			extractedTitle: fullTitle,
+			rawResolutionId: resObj.rawId,
+			parsedStatus: status,
+			textSnippet: cleanText.substring(0, 150) + "...",
+			associatedItems: resObj.spatialItems.slice(0, 10)
+		  }
+		}
+	  });
+	}
+
+    function filterSpatialItemsForText(textSnippet, structuredMap) {
+      if (!structuredMap || !structuredMap.pages) return [];
+      const keywords = textSnippet.split(/\s+/).filter(w => w.length > 4).slice(0, 5);
+      const matches = [];
+
+      structuredMap.pages.forEach(p => {
+        p.lines.forEach(l => {
+          if (keywords.some(kw => l.text.toLowerCase().includes(kw.toLowerCase()))) {
+            matches.push(l);
+          }
+        });
+      });
+
+      return matches;
+    }
+
+    function calculatePageRange(items) {
+      if (!items || items.length === 0) return "1";
+      const pages = [...new Set(items.map(i => i.page))];
+      return pages.join(", ");
+    }
+
+    // Problem 2 Fix: Render Staging Drawer (Corrected container selector from staging-list to staging-tab-items)
+    function renderStagingDrawer() {
+      const container = document.getElementById("staging-tab-items");
+      if (!container) return;
+      container.innerHTML = "";
+
+      document.getElementById("staging-count").innerText = state.stagedResolutions.length;
+
+      state.stagedResolutions.forEach((item, index) => {
+        const spatial = item.spatialMetadata || {};
+        const dict = spatial.structuredDictionary || {};
+
+        const card = document.createElement("div");
+        card.className = "p-4 border rounded-xl bg-slate-50 space-y-3 relative shadow-sm hover:border-indigo-300 transition";
+        card.innerHTML = `
+          <button onclick="removeStagedRow(${index})" class="absolute top-3 right-3 text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50" title="Delete Row">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+
+          <div class="flex items-center gap-2 mb-1">
+            <span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+              <i data-lucide="map-pin" class="w-3 h-3"></i> Page ${spatial.pageRange || '1'}
+            </span>
+            <span class="bg-slate-200 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
+              Items: ${spatial.itemCount || 0}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Full Resolution ID</label>
+              <input type="text" value="${item.id}" onchange="updateStagedItem(${index}, 'id', this.value)" class="w-full p-2 border rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Title</label>
+              <input type="text" value="${escapeHtml(item.title)}" onchange="updateStagedItem(${index}, 'title', this.value)" class="w-full p-2 border rounded-lg text-xs focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Resolution Text</label>
+              <textarea onchange="updateStagedItem(${index}, 'text', this.value)" class="w-full p-2 border rounded-lg text-xs focus:ring-2 focus:ring-indigo-500" rows="2">${escapeHtml(item.text)}</textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Outcome Status</label>
+              <select onchange="updateStagedItem(${index}, 'status', this.value)" class="w-full p-2 border rounded-lg text-xs font-semibold focus:ring-2 focus:ring-indigo-500">
+                <option value="Passed" ${item.status === 'Passed' ? 'selected' : ''}>Passed</option>
+                <option value="Failed" ${item.status === 'Failed' ? 'selected' : ''}>Failed</option>
+                <option value="No Action Taken" ${item.status === 'No Action Taken' ? 'selected' : ''}>No Action Taken</option>
+              </select>
+            </div>
+          </div>
+
+          <details class="text-xs bg-white p-2.5 rounded-lg border border-slate-200">
+            <summary class="cursor-pointer font-bold text-slate-700 flex items-center gap-1 select-none">
+              <i data-lucide="database" class="w-3.5 h-3.5 text-indigo-600"></i> View Structured Position & Layout Dictionary
+            </summary>
+            <div class="mt-2 space-y-1 font-mono text-[11px] text-slate-600 bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto">
+              <div><span class="text-indigo-300">pageRange:</span> "${spatial.pageRange || 1}"</div>
+              <div><span class="text-indigo-300">spatialItemCount:</span> ${spatial.itemCount || 0}</div>
+              <div><span class="text-indigo-300">parsedStatus:</span> "${dict.parsedStatus || item.status}"</div>
+              <div><span class="text-indigo-300">sampleBounds:</span> ${JSON.stringify(spatial.sampleBounds || {})}</div>
+            </div>
+          </details>
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function escapeHtml(str) {
+      return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function updateStagedItem(index, key, value) {
+      state.stagedResolutions[index][key] = value;
+    }
+
+    function removeStagedRow(index) {
+      state.stagedResolutions.splice(index, 1);
+      renderStagingDrawer();
+    }
+
+    function addManualStagedRow() {
+      state.stagedResolutions.push({
+        id: "2026.09.09.X",
+        title: "New Custom Resolution",
+        text: "Resolved, that...",
+        status: "Passed",
+        meeting_date: "2026.09.09",
+        spatialMetadata: {
+          pageRange: "1",
+          itemCount: 1,
+          structuredDictionary: { source: "Manual User Input" }
+        }
+      });
+      renderStagingDrawer();
+    }
+
+    // Commit Staged Items to CGI Backend
+    async function commitStagedToSQLite() {
+      try {
+        const response = await fetch(CGI_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resolutions: state.stagedResolutions })
+        });
+
+        const res = await response.json();
+        if (response.ok) {
+          alert(`Successfully saved ${res.count || state.stagedResolutions.length} resolutions with spatial layout metadata to SQLite!`);
+          closeStagingModal();
+          await syncWithCgiBackend();
+        } else {
+          alert("Database save failed: " + (res.error || "Unknown error"));
+        }
+      } catch (err) {
+        console.error("CGI Post Error:", err);
+        state.resolutions.push(...state.stagedResolutions);
+        renderResolutionsTable();
+        updateStats();
+        closeStagingModal();
+        alert("Saved to local session state (CGI Offline mode).");
+      }
+    }
+
+    // Render Table View
+    function renderResolutionsTable() {
+      const tbody = document.getElementById("resolutions-tbody");
+      const search = document.getElementById("search-input").value.toLowerCase();
+      const statusFilter = document.getElementById("filter-status").value;
+
+      tbody.innerHTML = "";
+
+      const filtered = state.resolutions.filter(r => {
+        const matchesSearch = r.id.toLowerCase().includes(search) ||
+                              r.title.toLowerCase().includes(search) ||
+                              (r.text && r.text.toLowerCase().includes(search));
+        const matchesStatus = statusFilter === "ALL" || r.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      });
+
+      filtered.forEach(r => {
+        let statusBadge = "";
+        if (r.status === "Passed") {
+          statusBadge = `<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-semibold border border-emerald-200">Passed</span>`;
+        } else if (r.status === "Failed") {
+          statusBadge = `<span class="bg-rose-100 text-rose-800 text-xs px-2.5 py-1 rounded-full font-semibold border border-rose-200">Failed</span>`;
+        } else {
+          statusBadge = `<span class="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-semibold border border-amber-200">No Action Taken</span>`;
+        }
+
+        const spatialInfo = r.spatialMetadata ? `
+          <span class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-[11px] font-medium px-2 py-0.5 rounded border border-indigo-100" title="PDF Position Data Present">
+            <i data-lucide="layers" class="w-3 h-3"></i> Page ${r.spatialMetadata.pageRange || '1'}
+          </span>
+        ` : `<span class="text-slate-400 text-xs">Text Only</span>`;
+
+        const row = document.createElement("tr");
+        row.className = "hover:bg-slate-50 transition cursor-pointer";
+        row.onclick = () => showResolutionDetails(r);
+        row.innerHTML = `
+          <td class="p-4 font-mono font-bold text-indigo-700 text-xs">${r.id}</td>
+          <td class="p-4 font-bold text-slate-800">${escapeHtml(r.title)}</td>
+          <td class="p-4 text-xs text-slate-600">${r.meeting_date || '-'}</td>
+          <td class="p-4">${statusBadge}</td>
+          <td class="p-4">${spatialInfo}</td>
+          <td class="p-4 text-right">
+            <button onclick="event.stopPropagation(); showResolutionDetails(${JSON.stringify(r).replace(/"/g, '&quot;')})" class="text-indigo-600 hover:text-indigo-800 font-semibold text-xs flex items-center gap-1 justify-end ml-auto">
+              <i data-lucide="eye" class="w-3.5 h-3.5"></i> View
+            </button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+      lucide.createIcons();
+    }
+
+    // Show Detail Modal
+    function showResolutionDetails(resolution) {
+      activeDetailResolution = resolution;
+      document.getElementById("detail-id").innerText = resolution.id;
+      document.getElementById("detail-title").innerText = resolution.title;
+      document.getElementById("detail-date").innerText = resolution.meeting_date || "N/A";
+      document.getElementById("detail-status").innerText = resolution.status;
+      document.getElementById("detail-text").innerText = resolution.text || "No text available.";
+
+      const spatial = resolution.spatialMetadata || {};
+      document.getElementById("detail-pages").innerText = spatial.pageRange || "1";
+
+      const fullMetaDict = {
+        resolutionId: resolution.id,
+        title: resolution.title,
+        status: resolution.status,
+        meetingDate: resolution.meeting_date,
+        spatialLayoutMetadata: resolution.spatialMetadata || {
+          note: "Standard raw text ingestion - no spatial PDF matrix captured."
+        },
+        documentContext: state.lastParsedDocumentMap ? {
+          totalPages: state.lastParsedDocumentMap.meta.numPages,
+          parsedAt: state.lastParsedDocumentMap.meta.parsedAt
+        } : null
+      };
+
+      document.getElementById("detail-metadata-json").innerHTML = syntaxHighlightJson(fullMetaDict);
+
+      switchDetailTab('text');
+      document.getElementById("detail-modal").classList.remove("hidden");
+    }
+
+    // JSON Syntax Highlighting Helper
+    function syntaxHighlightJson(json) {
+      if (typeof json !== 'string') {
+        json = JSON.stringify(json, null, 2);
+      }
+      json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return json.replace(/("(\\u[a-zA-A0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'json-key';
+          } else {
+            cls = 'json-string';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+          cls = 'json-null';
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+      });
+    }
+
+    // Stats Updater
+    function updateStats() {
+      document.getElementById("stat-total").innerText = state.resolutions.length;
+      document.getElementById("stat-passed").innerText = state.resolutions.filter(r => r.status === "Passed").length;
+      document.getElementById("stat-failed").innerText = state.resolutions.filter(r => r.status === "Failed").length;
+      document.getElementById("stat-noaction").innerText = state.resolutions.filter(r => r.status === "No Action Taken").length;
+    }
+
+    // Sample Data Loader
+    function loadDemoSample() {
+      const sampleText = `ACADEMIC SENATE MINUTES - Executive Council Meeting
+Date: 2026.09.09
+
+5.a Motion on Curriculum Enhancement Policy
+
+Adopted by roll-call vote. Resolved, that the Academic Senate recommends the adoption of the updated cross-disciplinary curriculum guidelines for Fall 2026.
+1. Implementation starts Fall 2026.
+
+5.b Resolution regarding Campus Facilities Modernization
+
+Motion passed. Resolved, that the executive council approves funding allocation requests for laboratory technology improvements.
+e. Modernization applies to science labs.
+
+5.c Proposal for Faculty Mentorship Grants
+
+Tabled for further review. Resolved, that action on the proposal be postponed pending budgetary review.`;
+
+      document.getElementById("raw-text-input").value = sampleText;
+    }
+  </script>
+</body>
+</html>
